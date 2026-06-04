@@ -1,4 +1,4 @@
-# FinAlly Project - the Finance Ally
+# AI-Trader Project - the financial trading platform
 
 All project documentation is in the `planning` directory.
 
