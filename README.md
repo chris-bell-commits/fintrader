@@ -1,13 +1,13 @@
-# FinAlly — AI Trading Workstation
+# FinTrader — AI Trading Workstation
 
 A visually stunning AI-powered trading workstation that streams live market data, simulates portfolio trading, and integrates an LLM chat assistant that can analyze positions and execute trades via natural language.
 
-Built entirely by coding agents as a capstone project for an agentic AI coding course.
+Built entirely by coding agents.
 
 ## Features
 
 - **Live price streaming** via SSE with green/red flash animations
-- **Simulated portfolio** — $10k virtual cash, market orders, instant fills
+- **Simulated portfolio** — £10k virtual cash, market orders, instant fills
 - **Portfolio visualizations** — heatmap (treemap), P&L chart, positions table
 - **AI chat assistant** — analyzes holdings, suggests and auto-executes trades
 - **Watchlist management** — track tickers manually or via AI
