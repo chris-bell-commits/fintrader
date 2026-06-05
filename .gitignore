@@ -205,3 +205,10 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# FinTrader runtime database (keep the directory, ignore the db files)
+db/*.db
+db/*.db-journal
+db/*.db-wal
+db/*.db-shm
+!db/.gitkeep

@@ -1,0 +1,75 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  @apply bg-white text-gray-800;
+}
+
+.dark body {
+  @apply bg-terminal-bg text-terminal-text;
+}
+
+@layer components {
+  .panel {
+    @apply rounded-lg border border-gray-200 bg-gray-50;
+  }
+  .dark .panel {
+    @apply border-terminal-border bg-terminal-panel;
+  }
+  .panel-title {
+    @apply px-3 py-2 text-xs font-semibold uppercase tracking-wider text-gray-500;
+  }
+  .dark .panel-title {
+    @apply text-terminal-muted;
+  }
+}
+
+/* Price flash animations */
+.flash-up {
+  animation: flashUp 0.5s ease-out;
+}
+.flash-down {
+  animation: flashDown 0.5s ease-out;
+}
+
+@keyframes flashUp {
+  0% {
+    background-color: rgba(22, 199, 132, 0.45);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+@keyframes flashDown {
+  0% {
+    background-color: rgba(234, 57, 67, 0.45);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+/* Thin scrollbars for the dense terminal feel */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  @apply rounded bg-gray-300;
+}
+.dark ::-webkit-scrollbar-thumb {
+  @apply bg-terminal-border;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}

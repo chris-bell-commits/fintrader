@@ -1,0 +1,16 @@
+services:
+  app:
+    build:
+      context: ..
+    ports:
+      - "8000:8000"
+    volumes:
+      - test-data:/app/db
+    environment:
+      - LLM_MOCK=true
+      - OPENROUTER_API_KEY=mock
+      - MASSIVE_API_KEY=
+      - DB_PATH=/app/db/fintrader.db
+
+volumes:
+  test-data:

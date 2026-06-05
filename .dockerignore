@@ -1,0 +1,16 @@
+**/.venv
+**/node_modules
+**/__pycache__
+**/.pytest_cache
+**/.ruff_cache
+frontend/.next
+frontend/out
+db/*.db
+db/*.db-journal
+db/*.db-wal
+db/*.db-shm
+.env
+.git
+.github
+.claude
+**/.DS_Store

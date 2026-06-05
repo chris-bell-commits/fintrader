@@ -1,0 +1,11 @@
+services:
+  fintrader:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - fintrader-data:/app/db
+    env_file: .env
+
+volumes:
+  fintrader-data:
