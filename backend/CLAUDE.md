@@ -42,7 +42,7 @@ router = create_stream_router(price_cache)  # Returns FastAPI APIRouter
 
 ### Seed Data
 
-Default tickers: AAPL, GOOGL, MSFT, AMZN, TSLA, NVDA, META, JPM, V, NFLX. Seed prices and per-ticker volatility/drift params are in `app/market/seed_prices.py`.
+Default tickers: AAPL, GOOGL, MSFT, AMZN, TSLA, NVDA, META, JPM, V, NFLX, SGE, SCT, RPI, RSW, LLY, JNJ, NVO, AZN, UNH, CVS. Seed prices and per-ticker volatility/drift params are in `app/market/seed_prices.py`.
 
 ## Running Tests
 
