@@ -85,3 +85,30 @@ The `.env` file at the project root must contain the `OPENROUTER_API_KEY` **with
 ```
 OPENROUTER_API_KEY=sk-or-v1-...
 ```
+
+---
+
+## Post-Build Changes
+
+### AI Chat Assistant — Improved System Prompt (`backend/app/llm.py`)
+The LLM system prompt was updated to make the assistant friendlier and more informative. It now:
+- Greets users and asks how it can help when first interacting
+- Acknowledges each request before acting (e.g. "Sure, I can help you buy some Apple shares")
+- Summarises completed actions with specific figures (e.g. price paid, remaining cash balance)
+- Offers follow-up suggestions where appropriate
+
+### Massive API Fix (`backend/app/market/massive_client.py`)
+The original `MassiveDataSource` used the `get_snapshot_all` endpoint which returns 403 on the free Massive API tier, causing prices to never appear when `MASSIVE_API_KEY` was set. Rewritten to:
+- Fetch real previous-close prices via `get_previous_close_agg` (available on all tiers) for each ticker at startup
+- Update the GBM simulator's seed prices with those real values
+- Delegate all live streaming to the simulator, which ticks every 500ms from the real base prices
+- Space API calls 1 second apart to stay within the free-tier rate limit (5 req/min); tickers that fail fall back to hardcoded defaults
+
+All 20 tickers stream live prices regardless of how many real close prices were successfully fetched.
+
+### Fly.io Deployment Fixes
+Two issues prevented successful deployment to Fly.io:
+
+1. **Missing `frontend/src/lib/` files** — the root `.gitignore` contained a blanket `lib/` rule (standard Python template) that unintentionally excluded `frontend/src/lib/` from git. Fixed by adding `!frontend/src/lib/` as a negation rule. The six missing files (`api.ts`, `format.ts`, `sectors.ts`, `types.ts`, `usePriceStream.ts`, `useTheme.ts`) are now tracked.
+
+2. **Port mismatch in `fly.toml`** — `internal_port` was set to `8080` but the app listens on port `8000`. Fixed and `fly.toml` added to the repository.
