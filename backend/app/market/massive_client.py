@@ -1,4 +1,9 @@
-"""Massive (Polygon.io) API client for real market data."""
+"""Massive (Polygon.io) API client for real market data.
+
+Fetches real previous-close prices for each ticker on startup, seeds the GBM
+simulator with those prices, then delegates live streaming to the simulator.
+This works on all Massive plan tiers including the free plan.
+"""
 
 from __future__ import annotations
 
@@ -6,123 +11,86 @@ import asyncio
 import logging
 
 from massive import RESTClient
-from massive.rest.models import SnapshotMarketType
 
 from .cache import PriceCache
 from .interface import MarketDataSource
+from .seed_prices import SEED_PRICES
+from .simulator import SimulatorDataSource
 
 logger = logging.getLogger(__name__)
 
 
 class MassiveDataSource(MarketDataSource):
-    """MarketDataSource backed by the Massive (Polygon.io) REST API.
+    """Seeds the GBM simulator with real Massive previous-close prices.
 
-    Polls GET /v2/snapshot/locale/us/markets/stocks/tickers for all watched
-    tickers in a single API call, then writes results to the PriceCache.
+    On startup, fetches the most recent closing price for each ticker via
+    get_previous_close_agg and uses those as simulator seed prices. The GBM
+    simulator then provides live tick-by-tick streaming from those real bases.
 
-    Rate limits:
-      - Free tier: 5 req/min → poll every 15s (default)
-      - Paid tiers: higher limits → poll every 2-5s
+    Works on all Massive plan tiers including the free tier.
     """
 
-    def __init__(
-        self,
-        api_key: str,
-        price_cache: PriceCache,
-        poll_interval: float = 15.0,
-    ) -> None:
+    def __init__(self, api_key: str, price_cache: PriceCache) -> None:
         self._api_key = api_key
         self._cache = price_cache
-        self._interval = poll_interval
-        self._tickers: list[str] = []
-        self._task: asyncio.Task | None = None
-        self._client: RESTClient | None = None
+        self._simulator: SimulatorDataSource | None = None
 
     async def start(self, tickers: list[str]) -> None:
-        self._client = RESTClient(api_key=self._api_key)
-        self._tickers = list(tickers)
+        client = RESTClient(api_key=self._api_key)
 
-        # Do an immediate first poll so the cache has data right away
-        await self._poll_once()
+        logger.info("Fetching real close prices for %d tickers...", len(tickers))
+        real_prices = await asyncio.to_thread(_fetch_prev_close_prices, client, tickers)
 
-        self._task = asyncio.create_task(self._poll_loop(), name="massive-poller")
-        logger.info(
-            "Massive poller started: %d tickers, %.1fs interval",
-            len(tickers),
-            self._interval,
-        )
+        if real_prices:
+            SEED_PRICES.update(real_prices)
+            logger.info("Seeded %d/%d tickers with real close prices", len(real_prices), len(tickers))
+        else:
+            logger.warning("No real prices fetched — simulator will use default seed prices")
+
+        self._simulator = SimulatorDataSource(price_cache=self._cache)
+        await self._simulator.start(tickers)
+        logger.info("MassiveDataSource ready: real-price-seeded GBM simulator running")
 
     async def stop(self) -> None:
-        if self._task and not self._task.done():
-            self._task.cancel()
-            try:
-                await self._task
-            except asyncio.CancelledError:
-                pass
-        self._task = None
-        self._client = None
-        logger.info("Massive poller stopped")
+        if self._simulator:
+            await self._simulator.stop()
+            self._simulator = None
 
     async def add_ticker(self, ticker: str) -> None:
         ticker = ticker.upper().strip()
-        if ticker not in self._tickers:
-            self._tickers.append(ticker)
-            logger.info("Massive: added ticker %s (will appear on next poll)", ticker)
+        client = RESTClient(api_key=self._api_key)
+        real_prices = await asyncio.to_thread(_fetch_prev_close_prices, client, [ticker])
+        if real_prices:
+            SEED_PRICES.update(real_prices)
+        if self._simulator:
+            await self._simulator.add_ticker(ticker)
 
     async def remove_ticker(self, ticker: str) -> None:
-        ticker = ticker.upper().strip()
-        self._tickers = [t for t in self._tickers if t != ticker]
-        self._cache.remove(ticker)
-        logger.info("Massive: removed ticker %s", ticker)
+        if self._simulator:
+            await self._simulator.remove_ticker(ticker)
 
     def get_tickers(self) -> list[str]:
-        return list(self._tickers)
+        if self._simulator:
+            return self._simulator.get_tickers()
+        return []
 
-    # --- Internal ---
 
-    async def _poll_loop(self) -> None:
-        """Poll on interval. First poll already happened in start()."""
-        while True:
-            await asyncio.sleep(self._interval)
-            await self._poll_once()
+def _fetch_prev_close_prices(client: RESTClient, tickers: list[str]) -> dict[str, float]:
+    """Fetch previous-close prices for a list of tickers. Synchronous; runs in a thread.
 
-    async def _poll_once(self) -> None:
-        """Execute one poll cycle: fetch snapshots, update cache."""
-        if not self._tickers or not self._client:
-            return
+    Spaces calls 1s apart to stay within the free-tier rate limit (5 req/min).
+    Tickers that fail (e.g. due to rate limiting) keep their default seed price.
+    """
+    import time
 
+    prices: dict[str, float] = {}
+    for i, ticker in enumerate(tickers):
+        if i > 0:
+            time.sleep(1.0)
         try:
-            # The Massive RESTClient is synchronous — run in a thread to
-            # avoid blocking the event loop.
-            snapshots = await asyncio.to_thread(self._fetch_snapshots)
-            processed = 0
-            for snap in snapshots:
-                try:
-                    price = snap.last_trade.price
-                    # Massive timestamps are Unix milliseconds → convert to seconds
-                    timestamp = snap.last_trade.timestamp / 1000.0
-                    self._cache.update(
-                        ticker=snap.ticker,
-                        price=price,
-                        timestamp=timestamp,
-                    )
-                    processed += 1
-                except (AttributeError, TypeError) as e:
-                    logger.warning(
-                        "Skipping snapshot for %s: %s",
-                        getattr(snap, "ticker", "???"),
-                        e,
-                    )
-            logger.debug("Massive poll: updated %d/%d tickers", processed, len(self._tickers))
-
-        except Exception as e:
-            logger.error("Massive poll failed: %s", e)
-            # Don't re-raise — the loop will retry on the next interval.
-            # Common failures: 401 (bad key), 429 (rate limit), network errors.
-
-    def _fetch_snapshots(self) -> list:
-        """Synchronous call to the Massive REST API. Runs in a thread."""
-        return self._client.get_snapshot_all(
-            market_type=SnapshotMarketType.STOCKS,
-            tickers=self._tickers,
-        )
+            result = client.get_previous_close_agg(ticker)
+            if result:
+                prices[ticker] = float(result[0].close)
+        except Exception as exc:
+            logger.warning("Could not fetch close price for %s: %s", ticker, exc)
+    return prices
